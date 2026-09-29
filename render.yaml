@@ -1,0 +1,56 @@
+# Render Blueprint — deploys both services from this one repo, free tier.
+# In the Render dashboard: New -> Blueprint -> pick this repo -> Apply.
+#
+# A few values can't be known until Render assigns URLs, so you'll set them
+# once by hand after the first deploy (see DEPLOYMENT.md, step 4):
+#   - backend's  CORS_ORIGINS        -> the frontend's onrender.com URL
+#   - frontend's VITE_API_BASE_URL   -> the backend's onrender.com URL + /api
+
+services:
+  - type: web
+    name: dsiar-edusuite-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URI
+        sync: false # paste your Atlas connection string in the dashboard
+      - key: DB_NAME
+        value: lms_fallback_unused # Checkpoint 2 is multi-tenant — each client gets its own DB, chosen per-request; this is only the harmless fallback name touched on boot
+      - key: JWT_SECRET
+        generateValue: true # Render generates a random secret for you
+      - key: JWT_EXPIRE_MINUTES
+        value: "10080"
+      - key: COOKIE_SECURE
+        value: "true" # required: Render serves everything over HTTPS
+      - key: COOKIE_SAMESITE
+        value: "none" # required: frontend + backend are on different onrender.com domains
+      - key: PLATFORM_SUPER_ADMIN_EMAIL
+        sync: false # your own Super Admin login — set on first deploy only
+      - key: PLATFORM_SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: PLATFORM_SUPER_ADMIN_NAME
+        value: "D'siar Tech"
+      - key: DIGITALSAMBA_TEAM_ID
+        sync: false
+      - key: DIGITALSAMBA_DEVELOPER_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false # set to https://<your-frontend>.onrender.com after step 1
+
+  - type: web
+    name: dsiar-edusuite-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false # set to https://<your-backend>.onrender.com/api after step 1
+    routes:
+      # SPA fallback so client-side routes (e.g. /catalog, /course/:id)
+      # don't 404 on a hard refresh.
+      - type: rewrite
+        source: /*
+        destination: /index.html
