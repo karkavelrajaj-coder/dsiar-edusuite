@@ -57,7 +57,22 @@ def get_tenant_db_name() -> str | None:
 def get_client() -> MongoClient:
     global _client
     if _client is None:
-        _client = MongoClient(settings.MONGO_URI, server_api=ServerApi("1"))
+        # Explicit timeouts matter here: without them, an unreachable Atlas
+        # cluster (bad IP allowlist, wrong credentials, cluster paused, a
+        # blocked outbound connection on the host) doesn't fail fast with a
+        # clear error — it can hang the very first query for minutes with
+        # nothing in the logs, which is exactly what makes it hard to
+        # diagnose on a platform like Render. 8s is generous for a healthy
+        # Atlas connection and short enough that a real problem surfaces
+        # immediately instead of silently eating the deploy's startup
+        # window.
+        _client = MongoClient(
+            settings.MONGO_URI,
+            server_api=ServerApi("1"),
+            serverSelectionTimeoutMS=8000,
+            connectTimeoutMS=8000,
+            socketTimeoutMS=8000,
+        )
     return _client
 
 

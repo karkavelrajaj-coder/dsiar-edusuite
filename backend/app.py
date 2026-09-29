@@ -16,12 +16,16 @@ scripts/create_tenant.py, which registers the company AND creates its
 first admin user in one step.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from http.cookies import SimpleCookie
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pymongo.errors import PyMongoError
+
+logger = logging.getLogger("dsiar_lms")
 
 from config import settings
 from db import ensure_indexes, set_tenant_db
@@ -45,13 +49,32 @@ from modules import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Indexes the fallback/default database only (settings.DB_NAME) — not
-    # any tenant's database, since the app has no fixed list of tenants at
-    # import time. Each tenant gets its indexes created once, at onboarding
-    # (POST /api/platform/tenants -> db.ensure_indexes_for(db_name)).
-    ensure_indexes()
-    # D'siar Tech's own Super Admin account — see config.PLATFORM_SUPER_ADMIN_*.
-    seed_platform_super_admin()
+    # Both of these talk to MongoDB Atlas. If Atlas is unreachable (bad
+    # network access list, wrong credentials, a paused free-tier cluster),
+    # we still want the process to come up and start serving — most
+    # importantly /api/health, which is what Render's port scan is waiting
+    # on — rather than blocking the whole deploy on it. Every real request
+    # that needs the database will still fail loudly on its own with a
+    # normal error; this only prevents a DB hiccup from masquerading as the
+    # entire app being down. The exception is logged so the actual cause
+    # (visible in Render's Logs tab) is never silently swallowed.
+    try:
+        # Indexes the fallback/default database only (settings.DB_NAME) —
+        # not any tenant's database, since the app has no fixed list of
+        # tenants at import time. Each tenant gets its indexes created once,
+        # at onboarding (POST /api/platform/tenants -> ensure_indexes_for).
+        ensure_indexes()
+        # D'siar Tech's own Super Admin account — see
+        # config.PLATFORM_SUPER_ADMIN_*.
+        seed_platform_super_admin()
+    except PyMongoError:
+        logger.exception(
+            "Startup could not reach MongoDB — the app will still boot and "
+            "serve /api/health, but every DB-backed route will fail until "
+            "this is fixed. Check MONGO_URI, the Atlas Network Access list, "
+            "the database user's permissions, and that the cluster isn't "
+            "paused."
+        )
     yield
 
 
