@@ -49,6 +49,15 @@ export default function Grading() {
   const courseTitle = (id) => courses.find((c) => c.id === id)?.title || "Unknown";
 
   async function saveAssignment(form) {
+    const ok = await confirm({
+      title: form.id ? "Save changes to this assignment?" : "Post this assignment?",
+      message: form.id
+        ? `"${form.title}" will update immediately, including for students who already see it.`
+        : `"${form.title}" will be posted on "${courseTitle(form.course_id)}" — visible to every enrolled student once they finish that course's modules.`,
+      confirmLabel: form.id ? "Save changes" : "Post assignment",
+      variant: "brand",
+    });
+    if (!ok) return;
     if (form.id) {
       await api.patch(`/assignments/${form.id}`, {
         title: form.title,

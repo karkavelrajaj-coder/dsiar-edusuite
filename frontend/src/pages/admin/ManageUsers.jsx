@@ -49,6 +49,13 @@ export default function ManageUsers() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    const ok = await confirm({
+      title: "Create this account?",
+      message: `A new ${newAccount.role} account will be created for ${newAccount.name || newAccount.email} with the password you entered — share it with them yourself, it isn't emailed automatically.`,
+      confirmLabel: "Create account",
+      variant: "brand",
+    });
+    if (!ok) return;
     try {
       await api.post("/users", newAccount);
       setNewAccount({ name: "", email: "", password: "", role: "student" });
@@ -62,6 +69,15 @@ export default function ManageUsers() {
     e.preventDefault();
     setError("");
     if (!enrollForm.user_id || !enrollForm.course_id) return;
+    const student = students.find((s) => s.id === enrollForm.user_id);
+    const course = courses.find((c) => c.id === enrollForm.course_id);
+    const ok = await confirm({
+      title: "Enroll this student?",
+      message: `${student?.name || "This student"} will get immediate access to "${course?.title || "this course"}" — its lessons, assignments, and certificate eligibility.`,
+      confirmLabel: "Enroll student",
+      variant: "brand",
+    });
+    if (!ok) return;
     try {
       await api.post("/enrollments", enrollForm);
       setEnrollForm({ user_id: "", course_id: "" });

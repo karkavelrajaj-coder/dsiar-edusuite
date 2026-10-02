@@ -65,6 +65,15 @@ export default function ManageLiveSessions() {
   const courseTitle = (id) => courses.find((c) => c.id === id)?.title || "Unknown";
 
   async function saveSession(form) {
+    const ok = await confirm({
+      title: form.id ? "Save changes to this session?" : "Schedule this session?",
+      message: form.id
+        ? `"${form.title}" will update immediately for every enrolled student.`
+        : `"${form.title}" will be scheduled on "${courseTitle(form.course_id)}" for ${form.date} ${form.time} (${form.timezone}) — visible to every enrolled student.`,
+      confirmLabel: form.id ? "Save changes" : "Schedule session",
+      variant: "brand",
+    });
+    if (!ok) return;
     const payload = { ...form, time: form.time.length === 5 ? `${form.time}:00` : form.time };
     if (form.id) {
       const { id, ...body } = payload;

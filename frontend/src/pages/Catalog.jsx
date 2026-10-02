@@ -89,7 +89,11 @@ export default function Catalog() {
             <div className="aspect-video w-full overflow-hidden bg-ink-100">
               {c.thumbnail_url ? (
                 <img
-                  src={c.thumbnail_url.startsWith("http") ? c.thumbnail_url : staticUrl(c.thumbnail_url)}
+                  src={
+                    c.thumbnail_url.startsWith("http") || c.thumbnail_url.startsWith("data:")
+                      ? c.thumbnail_url
+                      : staticUrl(c.thumbnail_url)
+                  }
                   alt={c.title}
                   className="h-full w-full object-cover"
                   onError={(e) => (e.currentTarget.style.display = "none")}

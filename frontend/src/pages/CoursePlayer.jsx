@@ -355,10 +355,10 @@ export default function CoursePlayer() {
                     <ResourceLink href={activeLesson.ppt_link} icon="📊" label="Slides" />
                   )}
                   {activeLesson.colab_link && (
-                    <ResourceLink href={activeLesson.colab_link} icon="💻" label="Colab notebook" />
+                    <ResourceLink href={activeLesson.colab_link} icon="💻" label="Practice link" />
                   )}
                   {activeLesson.dataset_link && (
-                    <ResourceLink href={activeLesson.dataset_link} icon="📁" label="Dataset" />
+                    <ResourceLink href={activeLesson.dataset_link} icon="📁" label="Resource" />
                   )}
                 </div>
               )}

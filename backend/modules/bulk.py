@@ -101,7 +101,7 @@ def _find_manageable_course(title: str, user: dict) -> dict | None:
 
 _COURSE_HEADERS = [
     "Course Title", "Category", "Description", "Is Free (yes/no)", "Track",
-    "Module Title", "Lesson Title", "YouTube ID", "PPT Link", "Colab Link", "Dataset Link",
+    "Module Title", "Lesson Title", "YouTube ID", "PPT Link", "Practice Link", "Resource Link",
 ]
 
 
@@ -189,8 +189,13 @@ async def bulk_courses(file: UploadFile, user: dict = Depends(require_roles("adm
                 "title": lesson_title,
                 "youtube_id": row.get("YouTube ID", ""),
                 "ppt_link": row.get("PPT Link", ""),
-                "colab_link": row.get("Colab Link", ""),
-                "dataset_link": row.get("Dataset Link", ""),
+                # "Practice Link"/"Resource Link" are the current template
+                # headers (generic wording — not every course is AI/data, so
+                # "Colab"/"Dataset" was misleading). Still accepts the old
+                # header names too, so a template someone already downloaded
+                # before this rename keeps working.
+                "colab_link": row.get("Practice Link") or row.get("Colab Link", ""),
+                "dataset_link": row.get("Resource Link") or row.get("Dataset Link", ""),
                 "order": lessons_col().count_documents({"module_id": str(module["_id"])}) + 1,
             }
             lessons_col().insert_one(lesson)
@@ -332,14 +337,14 @@ async def bulk_quizzes(file: UploadFile, user: dict = Depends(require_roles("adm
 
 # --- Enrollments (bulk-enroll students, creating accounts if needed) -------
 
-_ENROLLMENT_HEADERS = ["Student Email", "Student Name", "Password (leave blank to auto-generate)", "Course Title"]
+_ENROLLMENT_HEADERS = ["Student Email", "Student Name", "Password", "Course Title"]
 
 
 @router.get("/enrollments/template")
 def enrollments_template(user: dict = Depends(require_roles("admin"))):
     return _template_response(
         _ENROLLMENT_HEADERS,
-        [["jane@example.com", "Jane Doe", "", "Artificial Intelligence"]],
+        [["jane@example.com", "Jane Doe", "9876543210", "Artificial Intelligence"]],
         "enrollments_template.xlsx",
     )
 
@@ -375,7 +380,16 @@ async def bulk_enrollments(file: UploadFile, user: dict = Depends(require_roles(
             if tenant and tenant.get("max_users") and count_active_users() >= tenant["max_users"]:
                 results.append({"row": i, "status": "error", "message": f"Plan seat limit ({tenant['max_users']}) reached — upgrade to add more."})
                 continue
-            generated_password = row.get("Password (leave blank to auto-generate)") or secrets.token_urlsafe(9)
+            # "Password" is the current header; still reads the old
+            # "Password (leave blank to auto-generate)" header too, so an
+            # already-downloaded template keeps working. Leaving the column
+            # blank still auto-generates one (reported back below) — the
+            # header rename is just to stop it reading as optional, since
+            # most clients want to set a real, memorable one (e.g. the
+            # student's own phone number) rather than a random string.
+            generated_password = (
+                row.get("Password") or row.get("Password (leave blank to auto-generate)") or secrets.token_urlsafe(9)
+            )
             student_doc = {
                 "name": row.get("Student Name") or email.split("@")[0],
                 "email": email,

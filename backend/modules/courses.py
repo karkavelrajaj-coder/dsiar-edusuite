@@ -6,11 +6,12 @@ progress tracking (which triggers certificate issuance, same as the
 Streamlit course_player.py "Mark as complete" button).
 """
 
+import base64
 from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from db import (
     courses_col,
@@ -170,6 +171,45 @@ def update_course(course_id: str, body: UpdateCourseRequest, user: dict = Depend
         raise HTTPException(status_code=400, detail="Invalid track.")
     if update:
         courses_col().update_one({"_id": course["_id"]}, {"$set": update})
+    return course_out(courses_col().find_one({"_id": course["_id"]}))
+
+
+_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024  # 2MB — plenty for a course card image, small enough to live happily as a Mongo field
+_THUMBNAIL_CONTENT_TYPES = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/webp": "webp",
+}
+
+
+@router.post("/courses/{course_id}/thumbnail")
+async def upload_course_thumbnail(
+    course_id: str, file: UploadFile, user: dict = Depends(require_roles("admin", "instructor"))
+):
+    """Lets an admin/instructor set a course's thumbnail by uploading an
+    image directly, instead of needing a `thumbnail_url` (which, before
+    this, meant either hosting it somewhere yourself or asking us to drop a
+    file into backend/assets/ via GitHub — a real friction point for every
+    client). Stored as a base64 data: URL right on the course document
+    rather than written to disk: Render's free-tier filesystem is
+    ephemeral (wiped on every redeploy/restart), so anything saved to disk
+    at runtime would vanish the next time the service restarts. A data URL
+    has no such problem — it's just a string field, backed by the same
+    Atlas database everything else already relies on — at the cost of a
+    few hundred KB per course in that tenant's database, which is trivial
+    against even the free M0 tier."""
+    course = _get_course_or_404(course_id)
+    _assert_can_manage_course(user, course)
+
+    ext = _THUMBNAIL_CONTENT_TYPES.get(file.content_type)
+    if not ext:
+        raise HTTPException(status_code=400, detail="Only PNG, JPEG, or WEBP images are supported.")
+    raw = await file.read()
+    if len(raw) > _THUMBNAIL_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Image is too large — please use one under 2MB.")
+
+    data_url = f"data:{file.content_type};base64,{base64.b64encode(raw).decode('ascii')}"
+    courses_col().update_one({"_id": course["_id"]}, {"$set": {"thumbnail_url": data_url}})
     return course_out(courses_col().find_one({"_id": course["_id"]}))
 
 

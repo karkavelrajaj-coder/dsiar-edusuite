@@ -28,6 +28,15 @@ export function BulkImportButton({ kind, label, onDone }) {
   );
 }
 
+// A short, kind-specific tip shown above the generic instructions — only
+// where the column headers alone don't make the expected convention
+// obvious (the Password column is the main case: it's easy to misread as
+// optional).
+const KIND_HINTS = {
+  enrollments:
+    "Tip: set a real password for each student here — many clients just use the student's own phone number. They'll log in with your company code + their email + this password.",
+};
+
 function BulkImportModal({ open, kind, label, onClose, onDone }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +96,10 @@ function BulkImportModal({ open, kind, label, onClose, onDone }) {
           2. Upload it here. Every row is applied; rows that fail are reported
           individually so you can fix just those and re-upload.
         </div>
+
+        {KIND_HINTS[kind] && (
+          <div className="rounded-lg bg-brand-50 px-3.5 py-3 text-sm text-brand-700">{KIND_HINTS[kind]}</div>
+        )}
 
         <Button type="button" variant="secondary" onClick={downloadTemplate}>
           ⇩ Download template

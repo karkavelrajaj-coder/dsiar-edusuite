@@ -93,6 +93,15 @@ export default function ManageCourses() {
   }
 
   async function saveCourse(form) {
+    const ok = await confirm({
+      title: form.id ? "Save changes to this course?" : "Create this course?",
+      message: form.id
+        ? `"${form.title}" will update everywhere students and instructors see it, immediately.`
+        : `"${form.title}" will be created and visible to admins right away — add modules/lessons next before enrolling students.`,
+      confirmLabel: form.id ? "Save changes" : "Create course",
+      variant: "brand",
+    });
+    if (!ok) return;
     if (form.id) {
       await api.patch(`/courses/${form.id}`, {
         title: form.title,
@@ -123,11 +132,25 @@ export default function ManageCourses() {
 
   async function addModule(courseId, title) {
     if (!title) return;
+    const ok = await confirm({
+      title: "Add this module?",
+      message: `"${title}" will be added to this course, visible to admins right away.`,
+      confirmLabel: "Add module",
+      variant: "brand",
+    });
+    if (!ok) return;
     await api.post(`/courses/${courseId}/modules`, { title });
     loadModules(courseId);
   }
 
   async function renameModule(courseId, moduleId, title) {
+    const ok = await confirm({
+      title: "Rename this module?",
+      message: `It will be renamed to "${title}" everywhere students see it.`,
+      confirmLabel: "Save",
+      variant: "brand",
+    });
+    if (!ok) return;
     await api.patch(`/modules/${moduleId}`, { title });
     loadModules(courseId);
   }
@@ -145,11 +168,25 @@ export default function ManageCourses() {
 
   async function addLesson(courseId, moduleId, lesson) {
     if (!lesson.title) return;
+    const ok = await confirm({
+      title: "Add this lesson?",
+      message: `"${lesson.title}" will be added and visible to every student enrolled once they reach this module.`,
+      confirmLabel: "Add lesson",
+      variant: "brand",
+    });
+    if (!ok) return;
     await api.post(`/modules/${moduleId}/lessons`, lesson);
     loadModules(courseId);
   }
 
   async function updateLesson(courseId, lessonId, lesson) {
+    const ok = await confirm({
+      title: "Save changes to this lesson?",
+      message: `"${lesson.title}" will update immediately for every student, including anyone partway through it.`,
+      confirmLabel: "Save changes",
+      variant: "brand",
+    });
+    if (!ok) return;
     await api.patch(`/lessons/${lessonId}`, lesson);
     loadModules(courseId);
   }
@@ -272,7 +309,35 @@ export default function ManageCourses() {
 }
 
 function CourseModal({ open, course, instructors, isAdmin, onClose, onSave }) {
+  const confirm = useConfirm();
   const [form, setForm] = useState(emptyCourse);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  async function uploadThumbnail(file) {
+    if (!file) return;
+    setUploadError("");
+    const ok = await confirm({
+      title: "Replace this course's thumbnail?",
+      message: "The new image takes effect everywhere this course is shown — catalog, course page — as soon as it's uploaded.",
+      confirmLabel: "Upload",
+      variant: "brand",
+    });
+    if (!ok) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post(`/courses/${form.id}/thumbnail`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setForm((prev) => ({ ...prev, thumbnail_url: res.data.thumbnail_url }));
+    } catch (e) {
+      setUploadError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -316,8 +381,39 @@ function CourseModal({ open, course, instructors, isAdmin, onClose, onSave }) {
         <Field label="Description">
           <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </Field>
-        <Field label="Thumbnail" hint="Path (e.g. assets/AI Thumbnail.png) or a full URL">
-          <Input value={form.thumbnail_url} onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })} />
+        <Field
+          label="Thumbnail"
+          hint={
+            form.id
+              ? "Upload an image below, or paste a URL instead."
+              : "Paste a URL for now — image upload is available once the course is created (save it, then reopen Edit)."
+          }
+        >
+          <Input
+            placeholder="https://… (or leave blank and upload an image below)"
+            value={form.thumbnail_url?.startsWith("data:") ? "" : form.thumbnail_url}
+            onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
+          />
+          {form.thumbnail_url?.startsWith("data:") && (
+            <div className="mt-2 flex items-center gap-2">
+              <img src={form.thumbnail_url} alt="Current thumbnail" className="h-12 w-20 rounded-md object-cover" />
+              <span className="text-xs text-ink-500">Current uploaded thumbnail</span>
+            </div>
+          )}
+          {form.id && (
+            <div className="mt-2">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={uploading}
+                onChange={(e) => uploadThumbnail(e.target.files?.[0])}
+                className="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-ink-400">PNG, JPEG, or WEBP, up to 2MB.</p>
+              {uploading && <p className="mt-1 text-xs text-ink-500">Uploading…</p>}
+              {uploadError && <p className="mt-1 text-xs text-danger-600">{uploadError}</p>}
+            </div>
+          )}
         </Field>
         <Field label="Track" hint="Labels this course everywhere a student sees it (title, certificate) — the same for every student enrolled. Content and completion requirements never differ by track.">
           <Select value={form.track} onChange={(e) => setForm({ ...form, track: e.target.value })}>
@@ -472,8 +568,8 @@ function LessonRow({ lesson, onUpdate, onDelete }) {
         <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px] text-ink-400">
           {lesson.youtube_id ? <Badge variant="brand">▶ video</Badge> : <span>no video</span>}
           {lesson.ppt_link && <Badge variant="neutral">slides</Badge>}
-          {lesson.colab_link && <Badge variant="neutral">colab</Badge>}
-          {lesson.dataset_link && <Badge variant="neutral">dataset</Badge>}
+          {lesson.colab_link && <Badge variant="neutral">practice link</Badge>}
+          {lesson.dataset_link && <Badge variant="neutral">resource</Badge>}
         </div>
       </div>
       <div className="flex flex-shrink-0 items-center gap-1">
@@ -517,12 +613,12 @@ function LessonForm({ initial, onSubmit, onCancel, submitLabel }) {
         onChange={(e) => setLesson({ ...lesson, ppt_link: e.target.value })}
       />
       <Input
-        placeholder="Colab link"
+        placeholder="Practice link (GitHub, Colab, CodeSandbox, Figma…)"
         value={lesson.colab_link}
         onChange={(e) => setLesson({ ...lesson, colab_link: e.target.value })}
       />
       <Input
-        placeholder="Dataset link"
+        placeholder="Resource link (dataset, template, reading material…)"
         value={lesson.dataset_link}
         onChange={(e) => setLesson({ ...lesson, dataset_link: e.target.value })}
       />
