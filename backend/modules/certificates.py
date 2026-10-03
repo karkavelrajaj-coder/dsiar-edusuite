@@ -5,6 +5,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+import runtime_settings as rs
 from db import certificates_col, courses_col
 from security import get_current_user
 from serializers import certificate_out
@@ -66,6 +67,7 @@ def certificate_image(cert_id: str, user: dict = Depends(get_current_user)):
     student_name = student["name"] if student else "Unknown"
 
     tenant = current_tenant()
+    branding = rs.get_branding()
 
     image_bytes = build_certificate(
         student_name=student_name,
@@ -73,11 +75,14 @@ def certificate_image(cert_id: str, user: dict = Depends(get_current_user)):
         cert_id=cert["cert_id"],
         issued_at=cert["issued_at"],
         track=track,
-        # Checkpoint 2: logo/signature come from this client's own
-        # {company_code}_logo.png / {company_code}_signature.png if present,
-        # falling back to their plain company name in text otherwise — see
+        # Checkpoint 2: an uploaded logo/signature (Settings -> Certificate
+        # branding) wins if set; otherwise falls back to this client's own
+        # {company_code}_logo.png / {company_code}_signature.png file if
+        # present, then their plain company name in text — see
         # utils/certificate_image.py.
         company_code=tenant.get("company_code") if tenant else None,
         company_name=tenant.get("name") if tenant else None,
+        logo_data_url=branding.get("logo"),
+        signature_data_url=branding.get("signature"),
     )
     return Response(content=image_bytes, media_type="image/png")

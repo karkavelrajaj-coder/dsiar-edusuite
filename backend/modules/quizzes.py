@@ -1,7 +1,9 @@
-"""Module-level quizzes: exactly 5 auto-graded questions per module
+"""Module-level quizzes: 1-50 auto-graded questions per module
 (single-answer MCQ, multi-select, or true/false), gating "module complete"
 alongside lesson completion — see utils/certificates.py for how that feeds
-into the certificate flow.
+into the certificate flow. (The bulk-import spreadsheet format still
+expects exactly 5 rows per module — see modules/bulk.py — that's just the
+template's own convention, independent of this limit.)
 
 Ownership/RBAC is identical to courses/modules/lessons/assignments:
 admin manages every quiz, an instructor only manages quizzes on modules
@@ -80,11 +82,10 @@ def _lessons_complete_for_module(user_id: str, module_id: str) -> bool:
 
 
 def _validate_and_normalize_questions(questions) -> list[dict]:
-    """Enforces: exactly 5 questions (already checked by the pydantic
-    schema's min/max_length), each a valid type, at least 2 options, no
-    duplicate option ids, and a correct-answer set that matches the
-    question type (exactly one for single/true_false, at least one for
-    multi)."""
+    """Enforces: 1-50 questions (already checked by the pydantic schema's
+    min/max_length), each a valid type, at least 2 options, no duplicate
+    option ids, and a correct-answer set that matches the question type
+    (exactly one for single/true_false, at least one for multi)."""
     normalized = []
     for idx, q in enumerate(questions):
         if q.type not in VALID_TYPES:

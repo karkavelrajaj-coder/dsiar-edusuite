@@ -112,6 +112,37 @@ def get_effective_settings() -> dict:
     return result
 
 
+# --- Certificate branding (logo / signature) ---------------------------
+#
+# Lives in this same per-tenant settings document, but deliberately outside
+# ADMIN_SETTINGS_SCHEMA above: those are small scalar values with a generic
+# get/set/mask UI, while a logo/signature is an uploaded image (stored as a
+# base64 data: URL — see modules/settings.py's upload endpoint, same
+# reasoning as course thumbnails in modules/courses.py: Render's free-tier
+# disk doesn't survive a redeploy, a database field does). Falls back, in
+# utils/certificate_image.py, to the older file-based
+# backend/assets/{company_code}_logo.png convention if neither this nor an
+# upload exists yet — so a client onboarded before this feature existed
+# (D'siar Tech itself) keeps working unchanged.
+BRANDING_KEYS = {"logo": "branding_logo", "signature": "branding_signature"}
+
+
+def get_branding() -> dict:
+    doc = _load_doc()
+    return {name: doc.get(key) for name, key in BRANDING_KEYS.items()}
+
+
+def save_branding(name: str, data_url: str | None) -> None:
+    """name: "logo" or "signature". data_url=None clears it (falls back to
+    the file-based asset, then plain text, same as if it were never set)."""
+    key = BRANDING_KEYS[name]
+    if data_url:
+        settings_col().update_one({"_id": SETTINGS_DOC_ID}, {"$set": {key: data_url}}, upsert=True)
+    else:
+        settings_col().update_one({"_id": SETTINGS_DOC_ID}, {"$unset": {key: ""}}, upsert=True)
+    invalidate_cache()
+
+
 def save_settings(updates: dict) -> None:
     """updates: dict of key -> new value. Passing None or "" for a key
     clears the override so that key falls back to the env var again. Unknown

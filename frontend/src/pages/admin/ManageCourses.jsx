@@ -35,6 +35,9 @@ const QUESTION_TYPES = [
   { value: "true_false", label: "True / False" },
 ];
 
+// Used both as a stable-ish default id ("q1", "q2"...) and, when adding a
+// question after some have already been deleted, as a seed to keep new ids
+// from colliding with ones still in the list (see addQuestion below).
 function emptyQuestion(n) {
   return {
     id: `q${n}`,
@@ -50,6 +53,9 @@ function emptyQuestion(n) {
   };
 }
 
+// 5 is just a friendly starting point for a brand-new quiz — not a hard
+// requirement anymore. The builder below lets an admin/instructor add or
+// remove individual questions from there (1-50 allowed server-side).
 function emptyQuizQuestions() {
   return [1, 2, 3, 4, 5].map(emptyQuestion);
 }
@@ -673,6 +679,33 @@ function QuizModal({ open, moduleId, moduleTitle, onClose }) {
     setQuestions((prev) => prev.map((q, i) => (i === qIndex ? { ...q, ...patch } : q)));
   }
 
+  function addQuestion() {
+    setQuestions((prev) => {
+      if (prev.length >= 50) return prev; // matches the server-side cap
+      // Pick an id that doesn't collide with any question still in the
+      // list (earlier ones may have been deleted, so prev.length + 1 alone
+      // isn't safe).
+      const existingIds = new Set(prev.map((q) => q.id));
+      let n = prev.length + 1;
+      while (existingIds.has(`q${n}`)) n++;
+      return [...prev, emptyQuestion(n)];
+    });
+  }
+
+  async function removeQuestion(qIndex) {
+    if (questions.length <= 1) {
+      setError("A quiz needs at least 1 question — delete the whole quiz instead if you don't want one here.");
+      return;
+    }
+    const ok = await confirm({
+      title: "Remove this question?",
+      message: `Question ${qIndex + 1} will be removed from this quiz. This only takes effect once you click "Save quiz".`,
+      confirmLabel: "Remove question",
+    });
+    if (!ok) return;
+    setQuestions((prev) => prev.filter((_, i) => i !== qIndex));
+  }
+
   function updateOption(qIndex, oIndex, text) {
     setQuestions((prev) =>
       prev.map((q, i) => {
@@ -750,7 +783,7 @@ function QuizModal({ open, moduleId, moduleTitle, onClose }) {
     setError("");
     const ok = await confirm({
       title: hasQuiz ? "Save changes to this quiz?" : "Create this module's quiz?",
-      message: "Students will see these exact 5 questions the next time they open this module's quiz.",
+      message: `Students will see these exact ${questions.length} question${questions.length === 1 ? "" : "s"} the next time they open this module's quiz.`,
       confirmLabel: "Save quiz",
       variant: "brand",
     });
@@ -818,17 +851,26 @@ function QuizModal({ open, moduleId, moduleTitle, onClose }) {
                     <span className="text-xs font-semibold uppercase tracking-wide text-ink-400">
                       Question {qIndex + 1}
                     </span>
-                    <Select
-                      className="w-auto py-1 text-xs"
-                      value={q.type}
-                      onChange={(e) => changeType(qIndex, e.target.value)}
-                    >
-                      {QUESTION_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        className="w-auto py-1 text-xs"
+                        value={q.type}
+                        onChange={(e) => changeType(qIndex, e.target.value)}
+                      >
+                        {QUESTION_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </Select>
+                      <IconButton
+                        onClick={() => removeQuestion(qIndex)}
+                        className="hover:bg-danger-50 hover:text-danger-600"
+                        aria-label="Remove question"
+                      >
+                        🗑
+                      </IconButton>
+                    </div>
                   </div>
                   <Input
                     className="mt-2"
@@ -863,6 +905,9 @@ function QuizModal({ open, moduleId, moduleTitle, onClose }) {
                   </p>
                 </div>
               ))}
+              <Button type="button" variant="secondary" onClick={addQuestion} disabled={questions.length >= 50}>
+                + Add question
+              </Button>
             </div>
           ) : (
             <div className="max-h-[60vh] overflow-y-auto">

@@ -18,6 +18,7 @@ plain company name rendered in text, same as it always did for D'siar
 Tech's own certificate before dsiar-logo.png existed.
 """
 
+import base64
 import io
 import os
 from datetime import datetime
@@ -84,6 +85,22 @@ def _load_local_image(path, max_width):
         return None
 
 
+def _load_data_url_image(data_url, max_width):
+    """Same as _load_local_image, but for an uploaded-via-browser image
+    stored as a base64 data: URL (runtime_settings.get_branding()) instead
+    of a file on disk. Preferred over the file-based asset when present —
+    see _resolve_branding_image below."""
+    try:
+        if not data_url or not data_url.startswith("data:"):
+            return None
+        _, b64 = data_url.split(",", 1)
+        img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGBA")
+        ratio = max_width / img.width
+        return img.resize((max_width, int(img.height * ratio)))
+    except Exception:
+        return None
+
+
 def _diamond(draw, cx, cy, r, fill):
     draw.polygon([(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)], fill=fill)
 
@@ -105,6 +122,8 @@ def build_certificate(
     track: str = "course",
     company_code: str | None = None,
     company_name: str | None = None,
+    logo_data_url: str | None = None,
+    signature_data_url: str | None = None,
 ) -> bytes:
     display_name = (company_name or "Your Company").strip()
     meta = track_meta(track)
@@ -137,7 +156,12 @@ def build_certificate(
     content_w = WIDTH - 2 * inner
     y = 92
 
-    logo = _load_local_image(_client_asset_path(company_code, "logo"), max_width=150)
+    # Prefer an image uploaded from the browser (Settings -> Certificate
+    # branding) over the older file-in-the-repo convention, so switching to
+    # the upload flow doesn't require also deleting the old file.
+    logo = _load_data_url_image(logo_data_url, max_width=150) or _load_local_image(
+        _client_asset_path(company_code, "logo"), max_width=150
+    )
     if logo:
         img.paste(logo, (int((WIDTH - logo.width) / 2), y), logo)
         y += logo.height + 30
@@ -199,7 +223,9 @@ def build_certificate(
     # --- Footer right: signature block -------------------------------------
     sig_block_w = 380
     sig_x = WIDTH - inner - 50 - sig_block_w
-    signature_img = _load_local_image(_client_asset_path(company_code, "signature"), max_width=sig_block_w)
+    signature_img = _load_data_url_image(signature_data_url, max_width=sig_block_w) or _load_local_image(
+        _client_asset_path(company_code, "signature"), max_width=sig_block_w
+    )
     if signature_img:
         img.paste(signature_img, (sig_x + int((sig_block_w - signature_img.width) / 2), footer_y - 26), signature_img)
     else:

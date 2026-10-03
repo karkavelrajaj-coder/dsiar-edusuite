@@ -13,13 +13,18 @@ and only returned in full when the caller explicitly asks with
 ?reveal=true — still admin-only, still over HTTPS.
 """
 
-from fastapi import APIRouter, Depends
+import base64
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 import runtime_settings as rs
 from schemas import SettingsOut, SettingsUpdate
 from security import require_roles
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+_BRANDING_MAX_BYTES = 2 * 1024 * 1024  # 2MB, same ceiling as course thumbnails
+_BRANDING_CONTENT_TYPES = {"image/png": "png", "image/jpeg": "jpeg", "image/webp": "webp"}
 
 
 def _mask(value) -> str | None:
@@ -70,3 +75,38 @@ def update_settings(body: SettingsUpdate, user: dict = Depends(require_roles("ad
     updates = body.model_dump(exclude_unset=True)
     rs.save_settings(updates)
     return _build_response(reveal=False)
+
+
+# --- Certificate branding (logo / signature) --------------------------------
+#
+# Lets an admin upload their company's actual logo/signature image straight
+# from the browser, instead of needing us to drop a file into the GitHub
+# repo's backend/assets/ folder — the same friction the course-thumbnail
+# upload (modules/courses.py) removed for course cover images.
+
+@router.get("/branding")
+def get_branding(user: dict = Depends(require_roles("admin"))):
+    return rs.get_branding()
+
+
+@router.post("/branding/{which}")
+async def upload_branding(which: str, file: UploadFile, user: dict = Depends(require_roles("admin"))):
+    if which not in ("logo", "signature"):
+        raise HTTPException(status_code=404, detail="Not found.")
+    ext = _BRANDING_CONTENT_TYPES.get(file.content_type)
+    if not ext:
+        raise HTTPException(status_code=400, detail="Only PNG, JPEG, or WEBP images are supported.")
+    raw = await file.read()
+    if len(raw) > _BRANDING_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Image is too large — please use one under 2MB.")
+    data_url = f"data:{file.content_type};base64,{base64.b64encode(raw).decode('ascii')}"
+    rs.save_branding(which, data_url)
+    return rs.get_branding()
+
+
+@router.delete("/branding/{which}")
+def delete_branding(which: str, user: dict = Depends(require_roles("admin"))):
+    if which not in ("logo", "signature"):
+        raise HTTPException(status_code=404, detail="Not found.")
+    rs.save_branding(which, None)
+    return rs.get_branding()

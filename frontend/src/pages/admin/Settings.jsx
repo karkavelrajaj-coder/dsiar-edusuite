@@ -28,6 +28,55 @@ export default function Settings() {
     quiz_shuffle_options: true,
   });
   const [savingQuiz, setSavingQuiz] = useState(false);
+  const [branding, setBranding] = useState({ logo: null, signature: null });
+  const [brandingBusy, setBrandingBusy] = useState({ logo: false, signature: false });
+  const [brandingError, setBrandingError] = useState("");
+
+  async function loadBranding() {
+    const res = await api.get("/settings/branding");
+    setBranding(res.data);
+  }
+
+  async function uploadBranding(which, file) {
+    if (!file) return;
+    setBrandingError("");
+    const ok = await confirm({
+      title: `Replace the certificate ${which}?`,
+      message: "Every certificate generated from now on — including ones already issued, since the image is rendered on the fly each time it's viewed or downloaded — will use this image.",
+      confirmLabel: "Upload",
+      variant: "brand",
+    });
+    if (!ok) return;
+    setBrandingBusy((prev) => ({ ...prev, [which]: true }));
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post(`/settings/branding/${which}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setBranding(res.data);
+    } catch (err) {
+      setBrandingError(err.message);
+    } finally {
+      setBrandingBusy((prev) => ({ ...prev, [which]: false }));
+    }
+  }
+
+  async function removeBranding(which) {
+    const ok = await confirm({
+      title: `Remove the uploaded certificate ${which}?`,
+      message: "Certificates will fall back to the older file-based asset (if one was ever added to the repo for this client), or plain company-name text if not.",
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
+    setBrandingError("");
+    try {
+      const res = await api.delete(`/settings/branding/${which}`);
+      setBranding(res.data);
+    } catch (err) {
+      setBrandingError(err.message);
+    }
+  }
 
   async function load(withReveal = reveal) {
     const res = await api.get("/settings", { params: { reveal: withReveal } });
@@ -47,6 +96,7 @@ export default function Settings() {
 
   useEffect(() => {
     load();
+    loadBranding();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -190,6 +240,34 @@ export default function Settings() {
       {error && <div className="mt-4 rounded-lg bg-danger-50 px-3.5 py-2.5 text-sm text-danger-700">{error}</div>}
       {notice && <div className="mt-4 rounded-lg bg-success-50 px-3.5 py-2.5 text-sm text-success-700">{notice}</div>}
 
+      <Card className="mt-6 max-w-xl space-y-4">
+        <div>
+          <h2 className="font-display text-sm font-bold text-ink-900">🎓 Certificate branding</h2>
+          <p className="mt-1 text-xs text-ink-500">
+            Upload your company's logo and signature image directly — no need to ask us to add a file to the repo.
+            Takes effect immediately on every certificate (they're rendered fresh each time one is viewed or
+            downloaded).
+          </p>
+        </div>
+        {brandingError && <div className="rounded-lg bg-danger-50 px-3.5 py-2.5 text-sm text-danger-700">{brandingError}</div>}
+        <BrandingUploader
+          label="Logo"
+          hint="Shown at the top of the certificate. PNG, JPEG, or WEBP, up to 2MB — a transparent PNG looks best."
+          dataUrl={branding.logo}
+          busy={brandingBusy.logo}
+          onUpload={(file) => uploadBranding("logo", file)}
+          onRemove={() => removeBranding("logo")}
+        />
+        <BrandingUploader
+          label="Signature"
+          hint='Shown above the "Authorized Signatory" line. PNG, JPEG, or WEBP, up to 2MB.'
+          dataUrl={branding.signature}
+          busy={brandingBusy.signature}
+          onUpload={(file) => uploadBranding("signature", file)}
+          onRemove={() => removeBranding("signature")}
+        />
+      </Card>
+
       <Card as="form" onSubmit={save} className="mt-6 max-w-xl space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-sm font-bold text-ink-900">🎥 Digital Samba (live sessions)</h2>
@@ -313,6 +391,36 @@ export default function Settings() {
           {savingQuiz ? "Saving…" : "Save quiz settings"}
         </Button>
       </Card>
+    </div>
+  );
+}
+
+function BrandingUploader({ label, hint, dataUrl, busy, onUpload, onRemove }) {
+  return (
+    <div className="border-t border-ink-100 pt-4 first:border-t-0 first:pt-0">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold text-ink-600">{label}</span>
+        {dataUrl && (
+          <button type="button" onClick={onRemove} className="text-xs font-medium text-ink-400 hover:text-danger-600 hover:underline">
+            Remove
+          </button>
+        )}
+      </div>
+      {dataUrl && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-ink-50 px-3 py-2">
+          <img src={dataUrl} alt={`Current ${label.toLowerCase()}`} className="h-10 max-w-[140px] object-contain" />
+          <span className="text-xs text-ink-500">Currently uploaded</span>
+        </div>
+      )}
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        disabled={busy}
+        onChange={(e) => onUpload(e.target.files?.[0])}
+        className="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm"
+      />
+      <p className="mt-1 text-xs text-ink-400">{hint}</p>
+      {busy && <p className="mt-1 text-xs text-ink-500">Uploading…</p>}
     </div>
   );
 }

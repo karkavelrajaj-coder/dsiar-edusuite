@@ -213,7 +213,12 @@ class QuizQuestionIn(BaseModel):
 
 
 class SaveQuizRequest(BaseModel):
-    questions: list[QuizQuestionIn] = Field(min_length=5, max_length=5)
+    # Was pinned to exactly 5 — the one-by-one quiz builder now lets an
+    # admin/instructor add or remove individual questions, so this just
+    # keeps a sane floor/ceiling instead of a fixed count. The bulk-import
+    # template (modules/bulk.py) still expects exactly 5 rows per module —
+    # that's a separate, unrelated constraint on the spreadsheet format.
+    questions: list[QuizQuestionIn] = Field(min_length=1, max_length=50)
 
 
 class SubmitQuizAnswer(BaseModel):
