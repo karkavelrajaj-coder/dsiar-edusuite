@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { Badge, Button, Card, Field, Input, PageHeader } from "../../components/ui";
 import { useConfirm } from "../../context/ConfirmContext";
+import { useAuth } from "../../context/AuthContext";
 
 const sourceBadge = {
   database: { variant: "success", label: "Saved here" },
@@ -11,6 +12,8 @@ const sourceBadge = {
 
 export default function Settings() {
   const confirm = useConfirm();
+  const { user } = useAuth();
+  const liveSessionsOn = !!user?.features?.live_sessions;
   const [data, setData] = useState(null);
   const [form, setForm] = useState({
     digitalsamba_developer_key: "",
@@ -234,7 +237,11 @@ export default function Settings() {
       <PageHeader
         eyebrow="Admin"
         title="Settings"
-        description="Change Digital Samba credentials and session length without touching Render or redeploying. Everything else (database connection, JWT signing secret, CORS, etc.) stays managed in Render on purpose."
+        description={
+          liveSessionsOn
+            ? "Change Digital Samba credentials and session length without touching Render or redeploying. Everything else (database connection, JWT signing secret, CORS, etc.) stays managed in Render on purpose."
+            : "Change session length without touching Render or redeploying. Everything else (database connection, JWT signing secret, CORS, etc.) stays managed in Render on purpose."
+        }
       />
 
       {error && <div className="mt-4 rounded-lg bg-danger-50 px-3.5 py-2.5 text-sm text-danger-700">{error}</div>}
@@ -269,42 +276,46 @@ export default function Settings() {
       </Card>
 
       <Card as="form" onSubmit={save} className="mt-6 max-w-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-sm font-bold text-ink-900">🎥 Digital Samba (live sessions)</h2>
-          <button type="button" onClick={toggleReveal} className="text-xs font-medium text-brand-600 hover:underline">
-            {reveal ? "Hide values" : "Show values"}
-          </button>
-        </div>
+        {liveSessionsOn && (
+          <>
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-sm font-bold text-ink-900">🎥 Digital Samba (live sessions)</h2>
+              <button type="button" onClick={toggleReveal} className="text-xs font-medium text-brand-600 hover:underline">
+                {reveal ? "Hide values" : "Show values"}
+              </button>
+            </div>
 
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-ink-600">Developer key</span>
-            <SourceTag source={data.digitalsamba_developer_key_source} onReset={() => resetToRenderDefault("digitalsamba_developer_key", "Developer key")} />
-          </div>
-          <Input
-            type={reveal ? "text" : "password"}
-            placeholder={data.digitalsamba_developer_key_set ? data.digitalsamba_developer_key : "Not set"}
-            value={form.digitalsamba_developer_key}
-            onChange={(e) => setForm({ ...form, digitalsamba_developer_key: e.target.value })}
-          />
-          <p className="mt-1 text-xs text-ink-400">Leave blank to keep the current value.</p>
-        </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-semibold text-ink-600">Developer key</span>
+                <SourceTag source={data.digitalsamba_developer_key_source} onReset={() => resetToRenderDefault("digitalsamba_developer_key", "Developer key")} />
+              </div>
+              <Input
+                type={reveal ? "text" : "password"}
+                placeholder={data.digitalsamba_developer_key_set ? data.digitalsamba_developer_key : "Not set"}
+                value={form.digitalsamba_developer_key}
+                onChange={(e) => setForm({ ...form, digitalsamba_developer_key: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-ink-400">Leave blank to keep the current value.</p>
+            </div>
 
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-ink-600">Team ID</span>
-            <SourceTag source={data.digitalsamba_team_id_source} onReset={() => resetToRenderDefault("digitalsamba_team_id", "Team ID")} />
-          </div>
-          <Input
-            type={reveal ? "text" : "password"}
-            placeholder={data.digitalsamba_team_id_set ? data.digitalsamba_team_id : "Not set"}
-            value={form.digitalsamba_team_id}
-            onChange={(e) => setForm({ ...form, digitalsamba_team_id: e.target.value })}
-          />
-          <p className="mt-1 text-xs text-ink-400">Leave blank to keep the current value.</p>
-        </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-semibold text-ink-600">Team ID</span>
+                <SourceTag source={data.digitalsamba_team_id_source} onReset={() => resetToRenderDefault("digitalsamba_team_id", "Team ID")} />
+              </div>
+              <Input
+                type={reveal ? "text" : "password"}
+                placeholder={data.digitalsamba_team_id_set ? data.digitalsamba_team_id : "Not set"}
+                value={form.digitalsamba_team_id}
+                onChange={(e) => setForm({ ...form, digitalsamba_team_id: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-ink-400">Leave blank to keep the current value.</p>
+            </div>
+          </>
+        )}
 
-        <div className="border-t border-ink-100 pt-4">
+        <div className={liveSessionsOn ? "border-t border-ink-100 pt-4" : ""}>
           <div className="mb-1 flex items-center justify-between">
             <h2 className="font-display text-sm font-bold text-ink-900">🔐 Login session length</h2>
             <SourceTag source={data.jwt_expire_minutes_source} onReset={() => resetToRenderDefault("jwt_expire_minutes", "Session length")} />
